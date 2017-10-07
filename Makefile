@@ -14,5 +14,8 @@ $(OUT): $(OFILES)
 %.o: %.cpp
 	$(CC) -c -o $@ $(CFLAGS) $<
 
+install: $(OUT)
+	cp $(OUT) /usr/local/bin
+
 clean:
 	$(RM) *.o $(OUT)

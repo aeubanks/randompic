@@ -18,10 +18,10 @@ namespace {
 
 enum class dist_type {
     MANHATTAN,
-    EUCLIDEAN,
     EUCLIDEAN2,
     CHEBYSHEV,
     MIN_XY,
+    EUCLIDEAN,
 };
 
 std::ostream & operator<<(std::ostream & os, dist_type type) {
@@ -115,12 +115,6 @@ double min_xy_dist(point d) {
 double min_xy_dist(point a, point b) {
     return min_xy_dist(a - b);
 }
-
-/*
-std::array<point, 4> get_corners(int width, int height) {
-    return std::array<point, 4>{{point{0, 0}, point{width, 0}, point{0, height}, point{width, height}}};
-}
-*/
 
 struct dist_entry {
     int width, height;
@@ -253,12 +247,13 @@ double rand_double(std::mt19937_64 & rand) {
 }
 
 dist_type rand_type(std::mt19937_64 & rand) {
-    int randint = rand_int_bound(5, rand);
+    int randint = rand_int_bound(4, rand);
     return static_cast<dist_type>(randint);
 }
 
 dist_entry make_entry(int width, int height, std::mt19937_64 & rand) {
     dist_type type = rand_type(rand);
+    type = dist_type::EUCLIDEAN2;
     int x = rand_int_bound(width, rand);
     int y = rand_int_bound(height, rand);
     bool reverse = rand_bool(rand);
@@ -307,6 +302,7 @@ void create_picture(const std::string & out_file_name, int width, int height) {
     if (num_entries < 2) {
         num_entries = 2;
     }
+    //num_entries = 1;
     std::vector<dist_entry> entries;
     for (int i = 0; i < num_entries; i++) {
         entries.push_back(make_entry(width, height, rand));
@@ -360,6 +356,9 @@ void create_video(const std::string & out_file_name, int num_frames, int width, 
 
 std::pair<int, int> get_screen_size() {
     Display * dis = XOpenDisplay(NULL);
+    if (!dis) {
+        return {-1, -1};
+    }
     Screen * screen = XDefaultScreenOfDisplay(dis);
     int width = XWidthOfScreen(screen);
     int height = XHeightOfScreen(screen);
@@ -372,6 +371,10 @@ int main(int argc, char ** argv) {
     auto size = get_screen_size();
     auto width = std::get<0>(size);
     auto height = std::get<1>(size);
+    if (width < 0 || height < 0) {
+        std::cerr << "invalid xorg context\n";
+        return -1;
+    }
     if (width == 0 || height == 0) {
         std::cerr << "invalid screen size: " << width << ' ' << height << '\n';
         return -1;
@@ -383,7 +386,8 @@ int main(int argc, char ** argv) {
         desc.add_options()
             ("help,h", "Help description")
             ("video_frames,v", bpo::value<int>(), "Number of frames to output")
-            ("output,o", bpo::value<std::string>()->required(), "Output file name (use boost::format specifiers for video_frames), can be positional argument")
+            ("pic_count,p", bpo::value<int>(), "Number of pictures to output")
+            ("output,o", bpo::value<std::string>()->required(), "Output file name (use boost::format specifiers for video_frames and pic_count), can be positional argument")
             ;
         bpo::positional_options_description pos_desc;
         pos_desc.add("output", 1);
@@ -400,11 +404,23 @@ int main(int argc, char ** argv) {
         bpo::notify(vm);
 
         std::string out_file_name = vm["output"].as<std::string>();
+        if (vm.count("video_frames") && vm.count("pic_count")) {
+            std::cerr << "cannot use video_frames and pic_count options at same time\n";
+            return 1;
+        }
         if (vm.count("video_frames")) {
             int video_frames = vm["video_frames"].as<int>();
             create_video(out_file_name, video_frames, width, height);
         } else {
-            create_picture(out_file_name, width, height);
+            if (vm.count("pic_count")) {
+                int pic_count = vm["pic_count"].as<int>();
+                for (int i = 0; i < pic_count; i++) {
+                    std::string cur_file_name = (boost::format(out_file_name) % i).str();
+                    create_picture(cur_file_name, width, height);
+                }
+            } else {
+                create_picture(out_file_name, width, height);
+            }
         }
     } catch (bpo::error & e) {
         std::cerr << e.what() << '\n';
